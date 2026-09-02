@@ -70,7 +70,7 @@ build_openssl()
         "--prefix=${WORK_DIR}/runtime/openssl" \
         --libdir=lib \
         "--openssldir=${WORK_DIR}/runtime/openssl/ssl" \
-        "-Wl,-rpath,${WORK_DIR}/runtime/openssl/lib"
+        '-Wl,-rpath,$ORIGIN'
     make -j"${BUILD_JOBS}"
     make install_sw
 }
@@ -79,7 +79,8 @@ compile_redis()
 {
     cd "${REDIS_SRC}"
     make -j"${BUILD_JOBS}" BUILD_TLS=yes OPENSSL_PREFIX="${WORK_DIR}/runtime/openssl" \
-        LIBSSL_LIBS=-lssl LIBCRYPTO_LIBS=-lcrypto USE_SYSTEMD=no
+        LIBSSL_LIBS=-lssl LIBCRYPTO_LIBS=-lcrypto \
+        'REDIS_LDFLAGS=-Wl,-rpath,$$ORIGIN/../openssl/lib' USE_SYSTEMD=no
 }
 
 install()
@@ -90,18 +91,17 @@ install()
         LIBSSL_LIBS=-lssl LIBCRYPTO_LIBS=-lcrypto USE_SYSTEMD=no install
 }
 
-patch_rpath()
+verify_rpath()
 {
-    local file
-    command -v patchelf >/dev/null 2>&1
+    local file rpath
+    command -v readelf >/dev/null 2>&1
     for file in "${INSTALL_PREFIX}"/bin/*; do
         if file -b "${file}" | grep -q ELF; then
-            patchelf --set-rpath '$ORIGIN/../openssl/lib' "${file}"
+            rpath="$(readelf -d "${file}" | grep -E '(RPATH|RUNPATH)' | sed -n '1p')"
+            printf '%s\n' "${file}: ${rpath}"
+            grep -q '\$ORIGIN/../openssl/lib' <<<"${rpath}"
         fi
     done
-    while IFS= read -r file; do
-        patchelf --set-rpath '$ORIGIN' "${file}"
-    done < <(find "${INSTALL_PREFIX}/openssl/lib" -type f -name 'lib*.so*')
 }
 
 verify_openssl_runtime()
@@ -172,7 +172,7 @@ main()
     run_stage 'build openssl' build_openssl
     run_stage 'compile redis' compile_redis
     run_stage 'install redis' install
-    run_stage 'patch relative rpath' patch_rpath
+    run_stage 'verify relative rpath' verify_rpath
     run_stage 'verify OpenSSL runtime' verify_openssl_runtime
     run_stage 'verify binaries' verify
     run_stage 'package redis' package

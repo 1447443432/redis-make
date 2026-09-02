@@ -90,4 +90,4 @@ registry.cn-shanghai.aliyuncs.com/jing-images/linux_amd64_centos_builder:7.9.200
 registry.cn-shanghai.aliyuncs.com/jing-images/linux_arm64_centos_builder:7.9.2009
 ```
 
-镜像至少需要 gcc、g++、make、perl、tar、curl、sha256sum、patchelf，以及编译 OpenSSL 和 Redis TLS 所需的基础开发工具。
+镜像至少需要 gcc、g++、make、perl、tar、curl、sha256sum、readelf，以及编译 OpenSSL 和 Redis TLS 所需的基础开发工具。RPATH 在链接阶段写入，不依赖 `patchelf`。
