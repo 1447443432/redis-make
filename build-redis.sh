@@ -61,5 +61,5 @@ docker run --rm --platform "linux/${ARCH}" --user 0:0 \
 package="${OUTPUT_DIR}/redis-${REDIS_VERSION}-glibc*-${ARCH}.tar.gz"
 found=( ${package} )
 [ -f "${found[0]}" ] || { echo '[ERROR] package not found' >&2; exit 1; }
-sha256sum -c "${found[0]}.sha256"
+(cd "${OUTPUT_DIR}" && sha256sum -c "$(basename "${found[0]}.sha256")")
 echo "BUILD SUCCESS: ${found[0]}"
