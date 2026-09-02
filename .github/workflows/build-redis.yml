@@ -88,6 +88,11 @@ jobs:
           find output -maxdepth 1 -type f -printf '%f\n' | sort || true
           ls -lh output || true
           [ ! -f output/build-info.txt ] || cat output/build-info.txt
+          for log in output/docker-*.log output/build.log; do
+            [ -f "${log}" ] || continue
+            echo "========== ${log} (last 160 lines) =========="
+            tail -160 "${log}" || true
+          done
       - name: Verify SHA256
         shell: bash
         run: |
@@ -106,6 +111,7 @@ jobs:
             output/redis-*-amd64.tar.gz.sha256
             output/build-info.txt
             output/docker-amd64.log
+            output/docker-run-amd64.log
 
   build-arm64:
     name: Build Redis arm64
@@ -131,6 +137,11 @@ jobs:
           find output -maxdepth 1 -type f -printf '%f\n' | sort || true
           ls -lh output || true
           [ ! -f output/build-info.txt ] || cat output/build-info.txt
+          for log in output/docker-*.log output/build.log; do
+            [ -f "${log}" ] || continue
+            echo "========== ${log} (last 160 lines) =========="
+            tail -160 "${log}" || true
+          done
       - name: Verify SHA256
         shell: bash
         run: |
@@ -149,6 +160,7 @@ jobs:
             output/redis-*-arm64.tar.gz.sha256
             output/build-info.txt
             output/docker-arm64.log
+            output/docker-run-arm64.log
 
   release:
     name: Create Release

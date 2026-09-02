@@ -22,10 +22,21 @@ mkdir -p "${OUTPUT_DIR}"
 run_stage()
 {
     local name="$1"
+    local status
     shift
     echo "[INFO] ${name}"
-    "$@" >>"${BUILD_LOG}" 2>&1
-    echo "[OK] ${name}"
+    if "$@" >>"${BUILD_LOG}" 2>&1; then
+        echo "[OK] ${name}"
+        return 0
+    fi
+    status=$?
+    echo "[ERROR] ${name} (exit ${status})" >&2
+    echo "========== ${name} error summary ==========" >&2
+    grep -iE 'error|failed|fatal|not found|cannot|unsupported|no such' "${BUILD_LOG}" | tail -80 >&2 || true
+    echo "========== ${name} last log ==========" >&2
+    tail -120 "${BUILD_LOG}" >&2 || true
+    echo "==========================================" >&2
+    return "${status}"
 }
 
 validate()

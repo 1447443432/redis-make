@@ -60,9 +60,14 @@ fi
 
 IMAGE_NAME="redis-builder:${REDIS_VERSION}-${ARCH}"
 DOCKER_LOG="${OUTPUT_DIR}/docker-${ARCH}.log"
+DOCKER_RUN_LOG="${OUTPUT_DIR}/docker-run-${ARCH}.log"
 DOCKER_ARGS=(docker build --pull --platform "linux/${ARCH}" --build-arg "BUILDER_IMAGE=${BUILDER_IMAGE}" -t "${IMAGE_NAME}")
 [ "${DOCKER_NO_CACHE}" = true ] && DOCKER_ARGS+=(--no-cache)
-"${DOCKER_ARGS[@]}" . >"${DOCKER_LOG}" 2>&1
+if ! "${DOCKER_ARGS[@]}" . >"${DOCKER_LOG}" 2>&1; then
+    echo '[ERROR] docker build failed' >&2
+    tail -160 "${DOCKER_LOG}" >&2 || true
+    exit 1
+fi
 
 docker run --rm --platform "linux/${ARCH}" --entrypoint /bin/bash --user 0:0 \
     "${IMAGE_NAME}" -c "test \"\$(uname -m)\" = \"${EXPECTED_ARCH}\""
@@ -73,7 +78,11 @@ docker run --rm --platform "linux/${ARCH}" --user 0:0 \
     -e "REDIS_VERSION=${REDIS_VERSION}" \
     -e "OPENSSL_VERSION=${OPENSSL_VERSION}" \
     -v "${OUTPUT_DIR}:${CONTAINER_OUTPUT_DIR}" \
-    "${IMAGE_NAME}"
+    "${IMAGE_NAME}" >"${DOCKER_RUN_LOG}" 2>&1 || {
+        echo '[ERROR] docker run failed' >&2
+        tail -160 "${DOCKER_RUN_LOG}" >&2 || true
+        exit 1
+    }
 
 package="${OUTPUT_DIR}/redis-${REDIS_VERSION}-glibc*-${ARCH}.tar.gz"
 found=( ${package} )
