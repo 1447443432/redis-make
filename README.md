@@ -18,7 +18,7 @@ redis-make/
 
 ## 本地构建
 
-脚本会自动下载并缓存 Redis 源码到 `sources/`：
+仓库已内置 Redis 8.8.2 源码包。构建时如果 `sources/redis-${REDIS_VERSION}.tar.gz` 已存在就直接复用；如果不存在，才从 Redis 官网自动下载并缓存到 `sources/`。
 
 ```bash
 chmod +x build-redis.sh
@@ -34,6 +34,8 @@ REDIS_VERSION=8.8.2 ./build-redis.sh amd64
 BUILDER_IMAGE=my-builder:latest ./build-redis.sh amd64
 DOCKER_NO_CACHE=true ./build-redis.sh amd64
 ```
+
+新增版本不需要修改构建逻辑。例如构建 Redis 9.0.0 时，脚本会自动下载 `redis-9.0.0.tar.gz`；如果希望长期内置该版本，可以将下载后的源码包提交到 `sources/`。
 
 输出示例：
 
@@ -67,13 +69,15 @@ redis-trib.rb
 
 ## GitHub Actions
 
-推送到 `master` 或手动执行 `Build Redis` 会分别构建 amd64、arm64，并创建或覆盖：
+推送构建相关文件到 `master` 或手动执行 `Build Redis` 会分别构建 amd64、arm64，并创建或覆盖：
 
 ```text
 redis-8.8.2
 ```
 
 Release 附件包含两个架构的安装包、SHA256 文件、构建信息和 Docker 日志。手动执行时可在 `redis_version` 中填写三段式版本号；新增 Redis 版本无需修改 Workflow 或构建逻辑。
+
+Workflow 只监听 Dockerfile、构建脚本、配置和 Workflow 自身的变更。README 等文档文件的提交不会触发构建。
 
 ## Builder
 
