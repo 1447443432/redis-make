@@ -1,0 +1,64 @@
+name: Build Redis
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      redis_version:
+        description: Redis version (blank uses config/redis-version.conf)
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build Redis
+        env:
+          REQUESTED_REDIS_VERSION: ${{ inputs.redis_version }}
+        run: |
+          set -euo pipefail
+          source config/redis-version.conf
+          REDIS_VERSION="${REQUESTED_REDIS_VERSION:-${DEFAULT_REDIS_VERSION}}"
+          chmod +x build-redis.sh
+          ./build-redis.sh "${{ matrix.arch }}" "${REDIS_VERSION}"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: redis-${{ matrix.arch }}
+          path: |
+            output/redis-*.tar.gz
+            output/redis-*.tar.gz.sha256
+            output/build-info.txt
+            output/docker-*.log
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
+        with:
+          path: release
+          pattern: redis-*
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REDIS_VERSION: ${{ inputs.redis_version }}
+        run: |
+          set -euo pipefail
+          source config/redis-version.conf
+          REDIS_VERSION="${REQUESTED_REDIS_VERSION:-${DEFAULT_REDIS_VERSION}}"
+          tag="redis-${REDIS_VERSION}"
+          gh release delete "${tag}" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "${tag}" release/* --title "Redis ${REDIS_VERSION}" \
+            --notes "Redis ${REDIS_VERSION} portable packages for amd64 and arm64."
