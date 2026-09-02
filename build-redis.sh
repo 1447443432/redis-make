@@ -34,7 +34,10 @@ printf '%s' "${REDIS_VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || {
 
 mkdir -p "${OUTPUT_DIR}" "${SOURCE_DIR}"
 SOURCE_ARCHIVE="${SOURCE_DIR}/redis-${REDIS_VERSION}.tar.gz"
-if [ ! -s "${SOURCE_ARCHIVE}" ]; then
+if [ -s "${SOURCE_ARCHIVE}" ]; then
+    echo "[OK] use cached source: $(basename "${SOURCE_ARCHIVE}")"
+else
+    echo "[INFO] source not found, download: redis-${REDIS_VERSION}.tar.gz"
     curl --fail --location --retry 5 --connect-timeout 20 --max-time 1200 \
         -o "${SOURCE_ARCHIVE}.tmp" \
         "https://download.redis.io/releases/redis-${REDIS_VERSION}.tar.gz"
