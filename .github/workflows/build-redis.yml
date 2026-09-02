@@ -12,6 +12,14 @@ on:
         required: false
         default: false
         type: boolean
+      malloc:
+        description: "Memory allocator; libc supports both 4K and 64K pages"
+        required: false
+        default: libc
+        type: choice
+        options:
+          - libc
+          - jemalloc
   push:
     branches:
       - master
@@ -20,6 +28,7 @@ on:
       - "build-redis.sh"
       - "build.sh"
       - "config/**"
+      - "sources/**"
       - ".github/workflows/build-redis.yml"
 
 permissions:
@@ -36,6 +45,7 @@ jobs:
       redis_version: ${{ steps.resolve.outputs.redis_version }}
       release_tag: ${{ steps.resolve.outputs.release_tag }}
       build_tls: ${{ steps.resolve.outputs.build_tls }}
+      malloc: ${{ steps.resolve.outputs.malloc }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -45,6 +55,7 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.redis_version }}
           INPUT_BUILD_TLS: ${{ inputs.build_tls }}
+          INPUT_MALLOC: ${{ inputs.malloc }}
         run: |
           set -euo pipefail
           source config/redis-version.conf
@@ -56,9 +67,12 @@ jobs:
           RELEASE_TAG="redis-${VERSION}"
           BUILD_TLS="${INPUT_BUILD_TLS:-${BUILD_TLS:-false}}"
           case "${BUILD_TLS}" in true|false) ;; *) echo "invalid build_tls: ${BUILD_TLS}" >&2; exit 1 ;; esac
+          MALLOC="${INPUT_MALLOC:-${MALLOC:-libc}}"
+          case "${MALLOC}" in libc|jemalloc) ;; *) echo "invalid malloc: ${MALLOC}" >&2; exit 1 ;; esac
           echo "redis_version=${VERSION}" >>"${GITHUB_OUTPUT}"
           echo "release_tag=${RELEASE_TAG}" >>"${GITHUB_OUTPUT}"
           echo "build_tls=${BUILD_TLS}" >>"${GITHUB_OUTPUT}"
+          echo "malloc=${MALLOC}" >>"${GITHUB_OUTPUT}"
           {
             echo "## Redis build configuration"
             echo
@@ -66,6 +80,7 @@ jobs:
             echo "- Architectures: \`amd64\`, \`arm64\`"
             echo "- Release tag: \`${RELEASE_TAG}\`"
             echo "- TLS: \`${BUILD_TLS}\`"
+            echo "- Allocator: \`${MALLOC}\`"
             echo "- Runtime baseline: \`glibc 2.17\`"
           } >>"${GITHUB_STEP_SUMMARY}"
 
@@ -75,6 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BUILD_TLS: ${{ needs.resolve.outputs.build_tls }}
+      MALLOC: ${{ needs.resolve.outputs.malloc }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -124,6 +140,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     env:
       BUILD_TLS: ${{ needs.resolve.outputs.build_tls }}
+      MALLOC: ${{ needs.resolve.outputs.malloc }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5

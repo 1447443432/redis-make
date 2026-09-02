@@ -16,6 +16,7 @@ source config/redis-version.conf
 REDIS_VERSION="${VERSION_ARG:-${REDIS_VERSION}}"
 OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.6}"
 BUILD_TLS="${BUILD_TLS:-false}"
+MALLOC="${MALLOC:-libc}"
 
 case "${ARCH}" in
     amd64)
@@ -34,6 +35,7 @@ printf '%s' "${REDIS_VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || {
     exit 1
 }
 case "${BUILD_TLS}" in true|false) ;; *) echo "[ERROR] BUILD_TLS must be true or false" >&2; exit 1 ;; esac
+case "${MALLOC}" in libc|jemalloc) ;; *) echo "[ERROR] MALLOC must be libc or jemalloc" >&2; exit 1 ;; esac
 
 mkdir -p "${OUTPUT_DIR}" "${SOURCE_DIR}"
 SOURCE_ARCHIVE="${SOURCE_DIR}/redis-${REDIS_VERSION}.tar.gz"
@@ -82,6 +84,7 @@ docker run --rm --platform "linux/${ARCH}" --user 0:0 \
     -e "REDIS_VERSION=${REDIS_VERSION}" \
     -e "OPENSSL_VERSION=${OPENSSL_VERSION}" \
     -e "BUILD_TLS=${BUILD_TLS}" \
+    -e "MALLOC=${MALLOC}" \
     -v "${OUTPUT_DIR}:${CONTAINER_OUTPUT_DIR}" \
     "${IMAGE_NAME}" >"${DOCKER_RUN_LOG}" 2>&1 || {
         echo '[ERROR] docker run failed' >&2

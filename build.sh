@@ -7,6 +7,7 @@ cd "${BASE_DIR}"
 REDIS_VERSION="${REDIS_VERSION:?REDIS_VERSION is required}"
 OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.6}"
 BUILD_TLS="${BUILD_TLS:-false}"
+MALLOC="${MALLOC:-libc}"
 OUTPUT_DIR="${OUTPUT_DIR:-/output}"
 SOURCE_DIR="${SOURCE_DIR:-${BASE_DIR}/sources}"
 WORK_DIR="${WORK_DIR:-${BASE_DIR}/work}"
@@ -45,6 +46,7 @@ validate()
     printf '%s' "${REDIS_VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'
     test -s "${REDIS_TAR}"
     tar tzf "${REDIS_TAR}" >/dev/null
+    case "${MALLOC}" in libc|jemalloc) ;; *) return 1 ;; esac
     if [ "${BUILD_TLS}" = true ]; then
         test -s "${OPENSSL_TAR}"
         tar tzf "${OPENSSL_TAR}" >/dev/null
@@ -85,7 +87,7 @@ build_openssl()
 
 compile_redis()
 {
-    local make_args=(BUILD_TLS="${BUILD_TLS}" USE_SYSTEMD=no)
+    local make_args=(BUILD_TLS="${BUILD_TLS}" MALLOC="${MALLOC}" USE_SYSTEMD=no)
     if [ "${BUILD_TLS}" = true ]; then
         make_args+=(OPENSSL_PREFIX="${WORK_DIR}/runtime/openssl" LIBSSL_LIBS=-lssl LIBCRYPTO_LIBS=-lcrypto 'REDIS_LDFLAGS=-Wl,-rpath,$$ORIGIN/../openssl/lib')
     fi
@@ -95,7 +97,7 @@ compile_redis()
 
 install()
 {
-    local make_args=(BUILD_TLS="${BUILD_TLS}" USE_SYSTEMD=no)
+    local make_args=(BUILD_TLS="${BUILD_TLS}" MALLOC="${MALLOC}" USE_SYSTEMD=no)
     if [ "${BUILD_TLS}" = true ]; then
         make_args+=(OPENSSL_PREFIX="${WORK_DIR}/runtime/openssl" LIBSSL_LIBS=-lssl LIBCRYPTO_LIBS=-lcrypto)
     fi
@@ -178,6 +180,7 @@ arch=${build_arch}
 glibc=${glibc}
 build_jobs=${BUILD_JOBS}
 build_tls=${BUILD_TLS}
+malloc=${MALLOC}
 install_prefix=${INSTALL_PREFIX}
 INFO
 }
