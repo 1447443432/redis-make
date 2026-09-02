@@ -14,6 +14,7 @@ DOCKER_NO_CACHE="${DOCKER_NO_CACHE:-false}"
 # shellcheck disable=SC1091
 source config/redis-version.conf
 REDIS_VERSION="${VERSION_ARG:-${REDIS_VERSION}}"
+OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.6}"
 
 case "${ARCH}" in
     amd64)
@@ -45,6 +46,18 @@ else
     mv "${SOURCE_ARCHIVE}.tmp" "${SOURCE_ARCHIVE}"
 fi
 
+OPENSSL_ARCHIVE="${SOURCE_DIR}/openssl-${OPENSSL_VERSION}.tar.gz"
+if [ -s "${OPENSSL_ARCHIVE}" ]; then
+    echo "[OK] use cached dependency: $(basename "${OPENSSL_ARCHIVE}")"
+else
+    echo "[INFO] dependency not found, download: openssl-${OPENSSL_VERSION}.tar.gz"
+    curl --fail --location --retry 5 --connect-timeout 20 --max-time 1200 \
+        -o "${OPENSSL_ARCHIVE}.tmp" \
+        "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
+    tar tzf "${OPENSSL_ARCHIVE}.tmp" >/dev/null
+    mv "${OPENSSL_ARCHIVE}.tmp" "${OPENSSL_ARCHIVE}"
+fi
+
 IMAGE_NAME="redis-builder:${REDIS_VERSION}-${ARCH}"
 DOCKER_LOG="${OUTPUT_DIR}/docker-${ARCH}.log"
 DOCKER_ARGS=(docker build --pull --platform "linux/${ARCH}" --build-arg "BUILDER_IMAGE=${BUILDER_IMAGE}" -t "${IMAGE_NAME}")
@@ -58,6 +71,7 @@ rm -f "${OUTPUT_DIR}"/redis-"${REDIS_VERSION}"-*-"${ARCH}".tar.gz*
 docker run --rm --platform "linux/${ARCH}" --user 0:0 \
     -e "OUTPUT_DIR=${CONTAINER_OUTPUT_DIR}" \
     -e "REDIS_VERSION=${REDIS_VERSION}" \
+    -e "OPENSSL_VERSION=${OPENSSL_VERSION}" \
     -v "${OUTPUT_DIR}:${CONTAINER_OUTPUT_DIR}" \
     "${IMAGE_NAME}"
 

@@ -2,6 +2,8 @@
 
 通过 Docker 和 GitHub Actions 编译 Redis 可移植安装包，支持 amd64、arm64，使用 CentOS 7 Builder 生成 glibc 2.17 基线包。默认版本为 Redis 8.8.2。
 
+Redis 使用包内 OpenSSL 3.5.6，并为 Redis 可执行文件写入相对 RPATH；目标服务器不需要额外安装对应的 OpenSSL 运行库。
+
 ## 项目结构
 
 ```text
@@ -18,7 +20,7 @@ redis-make/
 
 ## 本地构建
 
-仓库已内置 Redis 8.8.2 源码包。构建时如果 `sources/redis-${REDIS_VERSION}.tar.gz` 已存在就直接复用；如果不存在，才从 Redis 官网自动下载并缓存到 `sources/`。
+仓库已内置 Redis 8.8.2 和 OpenSSL 3.5.6 源码包。构建时如果对应文件已存在就直接复用；如果不存在，才自动下载并缓存到 `sources/`。
 
 ```bash
 chmod +x build-redis.sh
@@ -88,4 +90,4 @@ registry.cn-shanghai.aliyuncs.com/jing-images/linux_amd64_centos_builder:7.9.200
 registry.cn-shanghai.aliyuncs.com/jing-images/linux_arm64_centos_builder:7.9.2009
 ```
 
-镜像至少需要 gcc、g++、make、perl、tar、curl、sha256sum 和 Redis TLS 构建所需的 OpenSSL 开发文件。
+镜像至少需要 gcc、g++、make、perl、tar、curl、sha256sum、patchelf，以及编译 OpenSSL 和 Redis TLS 所需的基础开发工具。
