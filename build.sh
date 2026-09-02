@@ -6,6 +6,7 @@ cd "${BASE_DIR}"
 
 REDIS_VERSION="${REDIS_VERSION:?REDIS_VERSION is required}"
 OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.6}"
+BUILD_TLS="${BUILD_TLS:-false}"
 OUTPUT_DIR="${OUTPUT_DIR:-/output}"
 SOURCE_DIR="${SOURCE_DIR:-${BASE_DIR}/sources}"
 WORK_DIR="${WORK_DIR:-${BASE_DIR}/work}"
@@ -44,8 +45,10 @@ validate()
     printf '%s' "${REDIS_VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'
     test -s "${REDIS_TAR}"
     tar tzf "${REDIS_TAR}" >/dev/null
-    test -s "${OPENSSL_TAR}"
-    tar tzf "${OPENSSL_TAR}" >/dev/null
+    if [ "${BUILD_TLS}" = true ]; then
+        test -s "${OPENSSL_TAR}"
+        tar tzf "${OPENSSL_TAR}" >/dev/null
+    fi
 }
 
 extract()
@@ -53,15 +56,20 @@ extract()
     rm -rf "${WORK_DIR}"
     mkdir -p "${WORK_DIR}/runtime"
     tar xzf "${REDIS_TAR}" -C "${WORK_DIR}"
-    tar xzf "${OPENSSL_TAR}" -C "${WORK_DIR}"
+    if [ "${BUILD_TLS}" = true ]; then
+        tar xzf "${OPENSSL_TAR}" -C "${WORK_DIR}"
+    fi
     REDIS_SRC="${WORK_DIR}/redis-${REDIS_VERSION}"
-    OPENSSL_SRC="${WORK_DIR}/openssl-${OPENSSL_VERSION}"
     test -d "${REDIS_SRC}"
-    test -d "${OPENSSL_SRC}"
+    if [ "${BUILD_TLS}" = true ]; then
+        OPENSSL_SRC="${WORK_DIR}/openssl-${OPENSSL_VERSION}"
+        test -d "${OPENSSL_SRC}"
+    fi
 }
 
 build_openssl()
 {
+    [ "${BUILD_TLS}" = true ] || return 0
     cd "${OPENSSL_SRC}"
     ./config \
         shared \
@@ -77,22 +85,28 @@ build_openssl()
 
 compile_redis()
 {
+    local make_args=(BUILD_TLS="${BUILD_TLS}" USE_SYSTEMD=no)
+    if [ "${BUILD_TLS}" = true ]; then
+        make_args+=(OPENSSL_PREFIX="${WORK_DIR}/runtime/openssl" LIBSSL_LIBS=-lssl LIBCRYPTO_LIBS=-lcrypto 'REDIS_LDFLAGS=-Wl,-rpath,$$ORIGIN/../openssl/lib')
+    fi
     cd "${REDIS_SRC}"
-    make -j"${BUILD_JOBS}" BUILD_TLS=yes OPENSSL_PREFIX="${WORK_DIR}/runtime/openssl" \
-        LIBSSL_LIBS=-lssl LIBCRYPTO_LIBS=-lcrypto \
-        'REDIS_LDFLAGS=-Wl,-rpath,$$ORIGIN/../openssl/lib' USE_SYSTEMD=no
+    make -j"${BUILD_JOBS}" "${make_args[@]}"
 }
 
 install()
 {
+    local make_args=(BUILD_TLS="${BUILD_TLS}" USE_SYSTEMD=no)
+    if [ "${BUILD_TLS}" = true ]; then
+        make_args+=(OPENSSL_PREFIX="${WORK_DIR}/runtime/openssl" LIBSSL_LIBS=-lssl LIBCRYPTO_LIBS=-lcrypto)
+    fi
     cd "${REDIS_SRC}"
     rm -rf "${INSTALL_PREFIX}/bin" "${INSTALL_PREFIX}/share"
-    make PREFIX="${INSTALL_PREFIX}" BUILD_TLS=yes OPENSSL_PREFIX="${WORK_DIR}/runtime/openssl" \
-        LIBSSL_LIBS=-lssl LIBCRYPTO_LIBS=-lcrypto USE_SYSTEMD=no install
+    make PREFIX="${INSTALL_PREFIX}" "${make_args[@]}" install
 }
 
 verify_rpath()
 {
+    [ "${BUILD_TLS}" = true ] || return 0
     local file rpath
     command -v readelf >/dev/null 2>&1
     for file in "${INSTALL_PREFIX}"/bin/*; do
@@ -106,6 +120,7 @@ verify_rpath()
 
 verify_openssl_runtime()
 {
+    [ "${BUILD_TLS}" = true ] || return 0
     local file ldd_output
     test -f "${INSTALL_PREFIX}/openssl/lib/libssl.so.3"
     test -f "${INSTALL_PREFIX}/openssl/lib/libcrypto.so.3"
@@ -150,8 +165,10 @@ package()
     stage_dir="${WORK_DIR}/${package_root}"
     rm -rf "${stage_dir}"
     cp -a "${INSTALL_PREFIX}" "${stage_dir}"
-    test -f "${stage_dir}/openssl/lib/libssl.so.3"
-    test -f "${stage_dir}/openssl/lib/libcrypto.so.3"
+    if [ "${BUILD_TLS}" = true ]; then
+        test -f "${stage_dir}/openssl/lib/libssl.so.3"
+        test -f "${stage_dir}/openssl/lib/libcrypto.so.3"
+    fi
     tar czf "${OUTPUT_DIR}/${package}" -C "${WORK_DIR}" "${package_root}"
     (cd "${OUTPUT_DIR}" && sha256sum "${package}") >"${OUTPUT_DIR}/${package}.sha256"
     cat >"${BUILD_INFO}" <<INFO
@@ -160,7 +177,7 @@ openssl_version=${OPENSSL_VERSION}
 arch=${build_arch}
 glibc=${glibc}
 build_jobs=${BUILD_JOBS}
-build_tls=true
+build_tls=${BUILD_TLS}
 install_prefix=${INSTALL_PREFIX}
 INFO
 }

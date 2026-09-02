@@ -7,6 +7,11 @@ on:
         description: "Redis version; empty uses config/redis-version.conf"
         required: false
         type: string
+      build_tls:
+        description: "Build Redis with bundled OpenSSL TLS support"
+        required: false
+        default: false
+        type: boolean
       docker_no_cache:
         description: "Disable Docker image layer cache"
         required: false
@@ -35,6 +40,7 @@ jobs:
     outputs:
       redis_version: ${{ steps.resolve.outputs.redis_version }}
       release_tag: ${{ steps.resolve.outputs.release_tag }}
+      build_tls: ${{ steps.resolve.outputs.build_tls }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -43,6 +49,7 @@ jobs:
         shell: bash
         env:
           INPUT_VERSION: ${{ inputs.redis_version }}
+          INPUT_BUILD_TLS: ${{ inputs.build_tls }}
         run: |
           set -euo pipefail
           source config/redis-version.conf
@@ -52,15 +59,18 @@ jobs:
             exit 1
           fi
           RELEASE_TAG="redis-${VERSION}"
+          BUILD_TLS="${INPUT_BUILD_TLS:-${BUILD_TLS:-false}}"
+          case "${BUILD_TLS}" in true|false) ;; *) echo "invalid build_tls: ${BUILD_TLS}" >&2; exit 1 ;; esac
           echo "redis_version=${VERSION}" >>"${GITHUB_OUTPUT}"
           echo "release_tag=${RELEASE_TAG}" >>"${GITHUB_OUTPUT}"
+          echo "build_tls=${BUILD_TLS}" >>"${GITHUB_OUTPUT}"
           {
             echo "## Redis build configuration"
             echo
             echo "- Version: \`${VERSION}\`"
             echo "- Architectures: \`amd64\`, \`arm64\`"
             echo "- Release tag: \`${RELEASE_TAG}\`"
-            echo "- TLS: \`enabled\`"
+            echo "- TLS: \`${BUILD_TLS}\`"
             echo "- Runtime baseline: \`glibc 2.17\`"
           } >>"${GITHUB_STEP_SUMMARY}"
 
@@ -70,6 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DOCKER_NO_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.docker_no_cache || 'false' }}
+      BUILD_TLS: ${{ needs.resolve.outputs.build_tls }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -119,6 +130,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     env:
       DOCKER_NO_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.docker_no_cache || 'false' }}
+      BUILD_TLS: ${{ needs.resolve.outputs.build_tls }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5

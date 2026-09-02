@@ -15,6 +15,7 @@ DOCKER_NO_CACHE="${DOCKER_NO_CACHE:-false}"
 source config/redis-version.conf
 REDIS_VERSION="${VERSION_ARG:-${REDIS_VERSION}}"
 OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.6}"
+BUILD_TLS="${BUILD_TLS:-false}"
 
 case "${ARCH}" in
     amd64)
@@ -32,6 +33,7 @@ printf '%s' "${REDIS_VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || {
     echo "[ERROR] invalid Redis version: ${REDIS_VERSION}" >&2
     exit 1
 }
+case "${BUILD_TLS}" in true|false) ;; *) echo "[ERROR] BUILD_TLS must be true or false" >&2; exit 1 ;; esac
 
 mkdir -p "${OUTPUT_DIR}" "${SOURCE_DIR}"
 SOURCE_ARCHIVE="${SOURCE_DIR}/redis-${REDIS_VERSION}.tar.gz"
@@ -46,16 +48,18 @@ else
     mv "${SOURCE_ARCHIVE}.tmp" "${SOURCE_ARCHIVE}"
 fi
 
-OPENSSL_ARCHIVE="${SOURCE_DIR}/openssl-${OPENSSL_VERSION}.tar.gz"
-if [ -s "${OPENSSL_ARCHIVE}" ]; then
-    echo "[OK] use cached dependency: $(basename "${OPENSSL_ARCHIVE}")"
-else
-    echo "[INFO] dependency not found, download: openssl-${OPENSSL_VERSION}.tar.gz"
-    curl --fail --location --retry 5 --connect-timeout 20 --max-time 1200 \
-        -o "${OPENSSL_ARCHIVE}.tmp" \
-        "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
-    tar tzf "${OPENSSL_ARCHIVE}.tmp" >/dev/null
-    mv "${OPENSSL_ARCHIVE}.tmp" "${OPENSSL_ARCHIVE}"
+if [ "${BUILD_TLS}" = true ]; then
+    OPENSSL_ARCHIVE="${SOURCE_DIR}/openssl-${OPENSSL_VERSION}.tar.gz"
+    if [ -s "${OPENSSL_ARCHIVE}" ]; then
+        echo "[OK] use cached dependency: $(basename "${OPENSSL_ARCHIVE}")"
+    else
+        echo "[INFO] dependency not found, download: openssl-${OPENSSL_VERSION}.tar.gz"
+        curl --fail --location --retry 5 --connect-timeout 20 --max-time 1200 \
+            -o "${OPENSSL_ARCHIVE}.tmp" \
+            "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
+        tar tzf "${OPENSSL_ARCHIVE}.tmp" >/dev/null
+        mv "${OPENSSL_ARCHIVE}.tmp" "${OPENSSL_ARCHIVE}"
+    fi
 fi
 
 IMAGE_NAME="redis-builder:${REDIS_VERSION}-${ARCH}"
@@ -77,6 +81,7 @@ docker run --rm --platform "linux/${ARCH}" --user 0:0 \
     -e "OUTPUT_DIR=${CONTAINER_OUTPUT_DIR}" \
     -e "REDIS_VERSION=${REDIS_VERSION}" \
     -e "OPENSSL_VERSION=${OPENSSL_VERSION}" \
+    -e "BUILD_TLS=${BUILD_TLS}" \
     -v "${OUTPUT_DIR}:${CONTAINER_OUTPUT_DIR}" \
     "${IMAGE_NAME}" >"${DOCKER_RUN_LOG}" 2>&1 || {
         echo '[ERROR] docker run failed' >&2

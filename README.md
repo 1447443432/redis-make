@@ -2,7 +2,7 @@
 
 通过 Docker 和 GitHub Actions 编译 Redis 可移植安装包，支持 amd64、arm64，使用 CentOS 7 Builder 生成 glibc 2.17 基线包。默认版本为 Redis 8.8.2。
 
-Redis 使用包内 OpenSSL 3.5.6，并为 Redis 可执行文件写入相对 RPATH；目标服务器不需要额外安装对应的 OpenSSL 运行库。
+默认不启用 TLS，和现有 Redis 8.8.1 包保持一致，因此默认产物不依赖 OpenSSL。需要 TLS 时可将 `BUILD_TLS=true`，脚本会使用包内 OpenSSL 3.5.6 并写入相对 RPATH。
 
 ## 项目结构
 
@@ -20,7 +20,7 @@ redis-make/
 
 ## 本地构建
 
-仓库已内置 Redis 8.8.2 和 OpenSSL 3.5.6 源码包。构建时如果对应文件已存在就直接复用；如果不存在，才自动下载并缓存到 `sources/`。
+仓库已内置 Redis 8.8.2 和 OpenSSL 3.5.6 源码包。构建时 Redis 源码始终按需复用或下载；仅在启用 TLS 时才准备 OpenSSL 依赖。
 
 ```bash
 chmod +x build-redis.sh
@@ -35,6 +35,7 @@ REDIS_VERSION=8.8.2 ./build-redis.sh amd64
 ./build-redis.sh amd64 9.0.0
 BUILDER_IMAGE=my-builder:latest ./build-redis.sh amd64
 DOCKER_NO_CACHE=true ./build-redis.sh amd64
+BUILD_TLS=true ./build-redis.sh amd64
 ```
 
 新增版本不需要修改构建逻辑。例如构建 Redis 9.0.0 时，脚本会自动下载 `redis-9.0.0.tar.gz`；如果希望长期内置该版本，可以将下载后的源码包提交到 `sources/`。
@@ -90,4 +91,4 @@ registry.cn-shanghai.aliyuncs.com/jing-images/linux_amd64_centos_builder:7.9.200
 registry.cn-shanghai.aliyuncs.com/jing-images/linux_arm64_centos_builder:7.9.2009
 ```
 
-镜像至少需要 gcc、g++、make、perl、tar、curl、sha256sum、readelf，以及编译 OpenSSL 和 Redis TLS 所需的基础开发工具。RPATH 在链接阶段写入，不依赖 `patchelf`。
+镜像至少需要 gcc、g++、make、perl、tar、curl、sha256sum、readelf，以及编译 Redis 所需的基础开发工具。启用 TLS 时还需要 OpenSSL 编译工具链；RPATH 在链接阶段写入，不依赖 `patchelf`。
