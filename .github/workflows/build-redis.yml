@@ -1,64 +1,290 @@
 name: Build Redis
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
     inputs:
       redis_version:
-        description: Redis version (blank uses config/redis-version.conf)
+        description: "Redis version; empty uses config/redis-version.conf"
         required: false
-        default: ''
+        type: string
+      docker_no_cache:
+        description: "Disable Docker image layer cache"
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - master
+    paths:
+      - "Dockerfile"
+      - "build-redis.sh"
+      - "build.sh"
+      - "config/**"
+      - ".github/workflows/build-redis.yml"
 
 permissions:
   contents: write
 
+env:
+  ARTIFACT_RETENTION_DAYS: "7"
+
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [amd64, arm64]
-    runs-on: ubuntu-24.04
+  resolve:
+    name: Resolve Redis version
+    runs-on: ubuntu-latest
+    outputs:
+      redis_version: ${{ steps.resolve.outputs.redis_version }}
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
     steps:
-      - uses: actions/checkout@v5
-      - name: Build Redis
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Resolve build metadata
+        id: resolve
+        shell: bash
         env:
-          REQUESTED_REDIS_VERSION: ${{ inputs.redis_version }}
+          INPUT_VERSION: ${{ inputs.redis_version }}
         run: |
           set -euo pipefail
           source config/redis-version.conf
-          REDIS_VERSION="${REQUESTED_REDIS_VERSION:-${DEFAULT_REDIS_VERSION}}"
-          chmod +x build-redis.sh
-          ./build-redis.sh "${{ matrix.arch }}" "${REDIS_VERSION}"
-      - uses: actions/upload-artifact@v6
+          VERSION="${INPUT_VERSION:-${REDIS_VERSION:-${DEFAULT_REDIS_VERSION}}}"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "invalid Redis version: ${VERSION}" >&2
+            exit 1
+          fi
+          RELEASE_TAG="redis-${VERSION}"
+          echo "redis_version=${VERSION}" >>"${GITHUB_OUTPUT}"
+          echo "release_tag=${RELEASE_TAG}" >>"${GITHUB_OUTPUT}"
+          {
+            echo "## Redis build configuration"
+            echo
+            echo "- Version: \`${VERSION}\`"
+            echo "- Architectures: \`amd64\`, \`arm64\`"
+            echo "- Release tag: \`${RELEASE_TAG}\`"
+            echo "- TLS: \`enabled\`"
+            echo "- Runtime baseline: \`glibc 2.17\`"
+          } >>"${GITHUB_STEP_SUMMARY}"
+
+  build-amd64:
+    name: Build Redis amd64
+    needs: resolve
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_NO_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.docker_no_cache || 'false' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Build Redis
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x build-redis.sh build.sh
+          ./build-redis.sh amd64 "${{ needs.resolve.outputs.redis_version }}"
+      - name: Show amd64 build output
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "========== amd64 output =========="
+          find output -maxdepth 1 -type f -printf '%f\n' | sort || true
+          ls -lh output || true
+          [ ! -f output/build-info.txt ] || cat output/build-info.txt
+      - name: Verify SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd output
+          sha256sum -c redis-${{ needs.resolve.outputs.redis_version }}-*-amd64.tar.gz.sha256
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
         with:
-          name: redis-${{ matrix.arch }}
+          name: redis-amd64
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+          if-no-files-found: error
+          compression-level: 0
           path: |
-            output/redis-*.tar.gz
-            output/redis-*.tar.gz.sha256
+            output/redis-*-amd64.tar.gz
+            output/redis-*-amd64.tar.gz.sha256
             output/build-info.txt
-            output/docker-*.log
+            output/docker-amd64.log
+
+  build-arm64:
+    name: Build Redis arm64
+    needs: resolve
+    runs-on: ubuntu-24.04-arm
+    env:
+      DOCKER_NO_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.docker_no_cache || 'false' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Build Redis
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x build-redis.sh build.sh
+          ./build-redis.sh arm64 "${{ needs.resolve.outputs.redis_version }}"
+      - name: Show arm64 build output
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "========== arm64 output =========="
+          find output -maxdepth 1 -type f -printf '%f\n' | sort || true
+          ls -lh output || true
+          [ ! -f output/build-info.txt ] || cat output/build-info.txt
+      - name: Verify SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd output
+          sha256sum -c redis-${{ needs.resolve.outputs.redis_version }}-*-arm64.tar.gz.sha256
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: redis-arm64
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+          if-no-files-found: error
+          compression-level: 0
+          path: |
+            output/redis-*-arm64.tar.gz
+            output/redis-*-arm64.tar.gz.sha256
+            output/build-info.txt
+            output/docker-arm64.log
 
   release:
-    needs: build
-    runs-on: ubuntu-24.04
+    name: Create Release
+    needs: [resolve, build-amd64, build-arm64]
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ needs.resolve.outputs.redis_version }}
+      tag: ${{ needs.resolve.outputs.release_tag }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v7
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Download artifacts
+        uses: actions/download-artifact@v7
         with:
-          path: release
-          pattern: redis-*
-          merge-multiple: true
-      - name: Create release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REQUESTED_REDIS_VERSION: ${{ inputs.redis_version }}
+          path: artifacts
+      - name: Merge release files
+        shell: bash
         run: |
           set -euo pipefail
-          source config/redis-version.conf
-          REDIS_VERSION="${REQUESTED_REDIS_VERSION:-${DEFAULT_REDIS_VERSION}}"
-          tag="redis-${REDIS_VERSION}"
-          gh release delete "${tag}" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "${tag}" release/* --title "Redis ${REDIS_VERSION}" \
-            --notes "Redis ${REDIS_VERSION} portable packages for amd64 and arm64."
+          rm -rf release
+          mkdir -p release
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec cp {} release/ \;
+          cp artifacts/redis-amd64/build-info.txt release/build-info-amd64.txt
+          cp artifacts/redis-arm64/build-info.txt release/build-info-arm64.txt
+          test "$(find release -maxdepth 1 -type f -name '*-amd64.tar.gz' | wc -l)" -eq 1
+          test "$(find release -maxdepth 1 -type f -name '*-arm64.tar.gz' | wc -l)" -eq 1
+          ls -lh release
+      - name: Create or update Release
+        id: create_release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.resolve.outputs.release_tag }}
+          name: ${{ needs.resolve.outputs.release_tag }}
+          generate_release_notes: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: release/*
+      - name: Show Release information
+        shell: bash
+        env:
+          RELEASE_URL: ${{ steps.create_release.outputs.url }}
+          RELEASE_ASSETS: ${{ steps.create_release.outputs.assets }}
+        run: |
+          set -euo pipefail
+          echo "repository=${GITHUB_REPOSITORY}"
+          echo "release_tag=${{ needs.resolve.outputs.release_tag }}"
+          echo "release_url=${RELEASE_URL}"
+          jq -r '.[] | "\(.name) -> \(.browser_download_url)"' <<<"${RELEASE_ASSETS}"
+          {
+            echo "## Release"
+            echo
+            echo "- Repository: \`${GITHUB_REPOSITORY}\`"
+            echo "- Tag: \`${{ needs.resolve.outputs.release_tag }}\`"
+            echo "- URL: ${RELEASE_URL}"
+            echo
+            echo "| Asset | Download URL |"
+            echo "|---|---|"
+            jq -r '.[] | "| \(.name) | \(.browser_download_url) |"' <<<"${RELEASE_ASSETS}"
+          } >>"${GITHUB_STEP_SUMMARY}"
+
+  sync-hap:
+    name: Sync Release to HAP
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.release.outputs.version }}
+      RELEASE_TAG: ${{ needs.release.outputs.tag }}
+      HAP_WEBHOOK_URL: ${{ secrets.HAP_WEBHOOK_URL }}
+    steps:
+      - name: Check HAP configuration
+        id: hap
+        shell: bash
+        run: |
+          if [ -n "${HAP_WEBHOOK_URL:-}" ]; then
+            echo "enabled=true" >>"${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >>"${GITHUB_OUTPUT}"
+          fi
+      - name: Show HAP sync status
+        shell: bash
+        env:
+          HAP_ENABLED: ${{ steps.hap.outputs.enabled }}
+        run: |
+          set -euo pipefail
+          if [ "${HAP_ENABLED}" = true ]; then
+            echo "HAP sync enabled"
+            echo "## HAP sync: enabled" >>"${GITHUB_STEP_SUMMARY}"
+          else
+            echo "HAP_WEBHOOK_URL is not configured; skip HAP sync"
+            echo "## HAP sync: skipped" >>"${GITHUB_STEP_SUMMARY}"
+          fi
+      - name: Download artifacts
+        if: steps.hap.outputs.enabled == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+      - name: Prepare HAP payload
+        if: steps.hap.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          AMD64_FILE="$(find artifacts/redis-amd64 -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          ARM64_FILE="$(find artifacts/redis-arm64 -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          AMD64_SHA_FILE="$(find artifacts/redis-amd64 -maxdepth 1 -type f -name '*.sha256' -print -quit)"
+          ARM64_SHA_FILE="$(find artifacts/redis-arm64 -maxdepth 1 -type f -name '*.sha256' -print -quit)"
+          test -n "${AMD64_FILE}" -a -n "${ARM64_FILE}" -a -n "${AMD64_SHA_FILE}" -a -n "${ARM64_SHA_FILE}"
+          AMD64_NAME="$(basename "${AMD64_FILE}")"
+          ARM64_NAME="$(basename "${ARM64_FILE}")"
+          AMD64_SHA256="$(awk 'NR==1{print $1}' "${AMD64_SHA_FILE}")"
+          ARM64_SHA256="$(awk 'NR==1{print $1}' "${ARM64_SHA_FILE}")"
+          [[ "${AMD64_SHA256}" =~ ^[0-9a-fA-F]{64}$ ]]
+          [[ "${ARM64_SHA256}" =~ ^[0-9a-fA-F]{64}$ ]]
+          RELEASE_JSON="$(gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
+          RELEASE_URL="$(jq -r '.html_url // empty' <<<"${RELEASE_JSON}")"
+          AMD64_URL="$(jq -r --arg n "${AMD64_NAME}" '[.assets[] | select(.name == $n) | .browser_download_url][0] // empty' <<<"${RELEASE_JSON}")"
+          ARM64_URL="$(jq -r --arg n "${ARM64_NAME}" '[.assets[] | select(.name == $n) | .browser_download_url][0] // empty' <<<"${RELEASE_JSON}")"
+          test -n "${RELEASE_URL}" -a -n "${AMD64_URL}" -a -n "${ARM64_URL}"
+          ATTACHMENT_URLS="$(jq -cn --arg amd64 "${AMD64_URL}" --arg arm64 "${ARM64_URL}" '[$amd64,$arm64]')"
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          jq -n \
+            --arg project_name "redis" --arg repository "${GITHUB_REPOSITORY}" --arg version "${VERSION}" --arg tag "${RELEASE_TAG}" \
+            --arg release_url "${RELEASE_URL}" --arg amd64_name "${AMD64_NAME}" --arg amd64_url "${AMD64_URL}" --arg amd64_sha256 "${AMD64_SHA256}" \
+            --arg arm64_name "${ARM64_NAME}" --arg arm64_url "${ARM64_URL}" --arg arm64_sha256 "${ARM64_SHA256}" --arg attachment_urls "${ATTACHMENT_URLS}" \
+            --arg commit_sha "${GITHUB_SHA}" --arg run_id "${GITHUB_RUN_ID}" --arg run_url "${RUN_URL}" \
+            '{project_name:$project_name,repository:$repository,version:$version,tag:$tag,release_url:$release_url,amd64_name:$amd64_name,amd64_url:$amd64_url,amd64_sha256:$amd64_sha256,arm64_name:$arm64_name,arm64_url:$arm64_url,arm64_sha256:$arm64_sha256,attachment_urls:$attachment_urls,commit_sha:$commit_sha,run_id:$run_id,run_url:$run_url,build_status:"success"}' >hap-payload.json
+          jq -e '(.attachment_urls|type)=="string" and ((.attachment_urls|fromjson|length)==2)' hap-payload.json >/dev/null
+          jq . hap-payload.json
+      - name: Send Release information to HAP
+        if: steps.hap.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors --connect-timeout 15 --max-time 180 \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            --data-binary @hap-payload.json \
+            "${HAP_WEBHOOK_URL}"
