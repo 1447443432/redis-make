@@ -8,12 +8,12 @@ on:
         required: false
         type: string
       build_tls:
-        description: "Build Redis with bundled OpenSSL TLS support"
+        description: "Build Redis with bundled OpenSSL TLS support (default: false)"
         required: false
         default: false
         type: boolean
       docker_no_cache:
-        description: "Disable Docker image layer cache"
+        description: "Disable Docker layer cache; slower, use for a clean rebuild"
         required: false
         default: false
         type: boolean
