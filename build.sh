@@ -66,7 +66,7 @@ verify()
 package()
 {
     local glibc build_arch package package_root stage_dir
-    glibc="$(ldd --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+    glibc="$(ldd --version 2>&1 | sed -n '1p' | grep -oE '[0-9]+\.[0-9]+' | sed -n '1p')"
     case "$(uname -m)" in
         x86_64) build_arch=amd64 ;;
         aarch64) build_arch=arm64 ;;
