@@ -78,14 +78,16 @@ build_openssl()
 compile_redis()
 {
     cd "${REDIS_SRC}"
-    make -j"${BUILD_JOBS}" BUILD_TLS=yes OPENSSL_PREFIX="${WORK_DIR}/runtime/openssl" USE_SYSTEMD=no
+    make -j"${BUILD_JOBS}" BUILD_TLS=yes OPENSSL_PREFIX="${WORK_DIR}/runtime/openssl" \
+        LIBSSL_LIBS=-lssl LIBCRYPTO_LIBS=-lcrypto USE_SYSTEMD=no
 }
 
 install()
 {
     cd "${REDIS_SRC}"
     rm -rf "${INSTALL_PREFIX}/bin" "${INSTALL_PREFIX}/share"
-    make PREFIX="${INSTALL_PREFIX}" BUILD_TLS=yes OPENSSL_PREFIX="${WORK_DIR}/runtime/openssl" USE_SYSTEMD=no install
+    make PREFIX="${INSTALL_PREFIX}" BUILD_TLS=yes OPENSSL_PREFIX="${WORK_DIR}/runtime/openssl" \
+        LIBSSL_LIBS=-lssl LIBCRYPTO_LIBS=-lcrypto USE_SYSTEMD=no install
 }
 
 patch_rpath()
@@ -100,6 +102,22 @@ patch_rpath()
     while IFS= read -r file; do
         patchelf --set-rpath '$ORIGIN' "${file}"
     done < <(find "${INSTALL_PREFIX}/openssl/lib" -type f -name 'lib*.so*')
+}
+
+verify_openssl_runtime()
+{
+    local file ldd_output
+    test -f "${INSTALL_PREFIX}/openssl/lib/libssl.so.3"
+    test -f "${INSTALL_PREFIX}/openssl/lib/libcrypto.so.3"
+    for file in "${INSTALL_PREFIX}"/bin/*; do
+        if file -b "${file}" | grep -q ELF; then
+            ldd_output="$(ldd "${file}" 2>&1)"
+            printf '%s\n' "${ldd_output}"
+            grep -q 'libssl.so.3' <<<"${ldd_output}"
+            grep -q 'libcrypto.so.3' <<<"${ldd_output}"
+            ! grep -qE 'lib(ssl|crypto)\.so\.10' <<<"${ldd_output}"
+        fi
+    done
 }
 
 verify()
@@ -132,6 +150,8 @@ package()
     stage_dir="${WORK_DIR}/${package_root}"
     rm -rf "${stage_dir}"
     cp -a "${INSTALL_PREFIX}" "${stage_dir}"
+    test -f "${stage_dir}/openssl/lib/libssl.so.3"
+    test -f "${stage_dir}/openssl/lib/libcrypto.so.3"
     tar czf "${OUTPUT_DIR}/${package}" -C "${WORK_DIR}" "${package_root}"
     (cd "${OUTPUT_DIR}" && sha256sum "${package}") >"${OUTPUT_DIR}/${package}.sha256"
     cat >"${BUILD_INFO}" <<INFO
@@ -153,6 +173,7 @@ main()
     run_stage 'compile redis' compile_redis
     run_stage 'install redis' install
     run_stage 'patch relative rpath' patch_rpath
+    run_stage 'verify OpenSSL runtime' verify_openssl_runtime
     run_stage 'verify binaries' verify
     run_stage 'package redis' package
     ls -lh "${OUTPUT_DIR}"
