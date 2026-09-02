@@ -52,11 +52,14 @@ extract()
 build_openssl()
 {
     cd "${OPENSSL_SRC}"
-    ./Configure "linux-$(uname -m)" \
-        --prefix="${WORK_DIR}/runtime/openssl" \
+    ./config \
+        shared \
+        no-tests \
+        -g \
+        "--prefix=${WORK_DIR}/runtime/openssl" \
         --libdir=lib \
-        --openssldir="${WORK_DIR}/runtime/openssl/ssl" \
-        shared no-tests
+        "--openssldir=${WORK_DIR}/runtime/openssl/ssl" \
+        "-Wl,-rpath,${WORK_DIR}/runtime/openssl/lib"
     make -j"${BUILD_JOBS}"
     make install_sw
 }
