@@ -12,11 +12,6 @@ on:
         required: false
         default: false
         type: boolean
-      docker_no_cache:
-        description: "Disable Docker layer cache; slower, use for a clean rebuild"
-        required: false
-        default: false
-        type: boolean
   push:
     branches:
       - master
@@ -79,7 +74,6 @@ jobs:
     needs: resolve
     runs-on: ubuntu-latest
     env:
-      DOCKER_NO_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.docker_no_cache || 'false' }}
       BUILD_TLS: ${{ needs.resolve.outputs.build_tls }}
     steps:
       - name: Checkout
@@ -129,7 +123,6 @@ jobs:
     needs: resolve
     runs-on: ubuntu-24.04-arm
     env:
-      DOCKER_NO_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.docker_no_cache || 'false' }}
       BUILD_TLS: ${{ needs.resolve.outputs.build_tls }}
     steps:
       - name: Checkout

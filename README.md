@@ -88,7 +88,6 @@ Workflow 只监听 Dockerfile、构建脚本、配置和 Workflow 自身的变�
 
 - `redis_version`：填写 Redis 三段式版本号；留空使用 `config/redis-version.conf` 中的默认版本。
 - `build_tls`：默认关闭。关闭时产物不依赖 OpenSSL，和 Redis 8.8.1 的包保持一致；只有需要 Redis TLS 功能时才勾选，脚本会编译并携带 OpenSSL 运行库。
-- `docker_no_cache`：默认关闭。Docker 会复用未变化的镜像层，构建更快；勾选后会强制重新执行 Dockerfile 的所有构建层，适合排查缓存异常或需要完全重新构建时使用，但会明显变慢。
 
 ## Builder
 
