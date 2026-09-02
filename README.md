@@ -58,7 +58,9 @@ tar zxf redis-8.8.2-glibc2.17-amd64.tar.gz -C /usr/local
 /usr/local/redis-8.8.2-glibc2.17-amd64/bin/redis-cli --version
 ```
 
-构建默认启用 TLS（`BUILD_TLS=yes`），产物包含：
+默认构建不启用 TLS（`BUILD_TLS=false`），因此产物不依赖 OpenSSL，和 Redis 8.8.1 包保持一致。启用 TLS 时，产物会携带 OpenSSL 3.5.6 运行库。
+
+产物包含：
 
 ```text
 redis-server
@@ -72,22 +74,33 @@ redis-trib.rb
 
 ## GitHub Actions
 
-推送构建相关文件到 `master` 或手动执行 `Build Redis` 会分别构建 amd64、arm64，并创建或覆盖：
+推送构建相关文件到 `master`，或手动执行 `Build Redis`，会分别构建 amd64、arm64，并创建或覆盖：
 
 ```text
 redis-8.8.2
 ```
 
-Release 附件包含两个架构的安装包、SHA256 文件、构建信息和 Docker 日志。手动执行时可在 `redis_version` 中填写三段式版本号；新增 Redis 版本无需修改 Workflow 或构建逻辑。
+Release 附件包含两个架构的安装包、SHA256 文件、构建信息和 Docker 日志。Release 标签格式为 `redis-版本号`，例如 `redis-8.8.2`。
+
+如果仓库配置了 `HAP_WEBHOOK_URL` Secret，Release 创建成功后会自动向 HAP Webhook 推送版本、下载地址和 SHA256 信息；未配置时自动跳过，不影响构建。
 
 Workflow 只监听 Dockerfile、构建脚本、配置和 Workflow 自身的变更。README 等文档文件的提交不会触发构建。
 
 ### 手动执行参数
 
-在 Actions → Build Redis → Run workflow 页面：
+在 GitHub 仓库的 Actions → Build Redis → Run workflow 页面填写：
 
-- `redis_version`：填写 Redis 三段式版本号；留空使用 `config/redis-version.conf` 中的默认版本。
-- `build_tls`：默认关闭。关闭时产物不依赖 OpenSSL，和 Redis 8.8.1 的包保持一致；只有需要 Redis TLS 功能时才勾选，脚本会编译并携带 OpenSSL 运行库。
+- `redis_version`：Redis 三段式版本号，例如 `8.8.2`；留空使用 `config/redis-version.conf` 中的默认版本。填写新版本时无需修改构建脚本。
+- `build_tls`：默认不勾选。保持不勾选即可生成与 Redis 8.8.1 类似、无 OpenSSL 运行依赖的包；只有需要 Redis TLS 功能时才勾选，脚本会编译并携带 OpenSSL 3.5.6。
+
+推荐构建 8.8.2：
+
+```text
+redis_version: 8.8.2
+build_tls:     unchecked
+```
+
+Workflow 的自动触发只监听 Dockerfile、构建脚本、配置和 Workflow 文件。README 等文档文件的提交不会触发构建。
 
 ## Builder
 

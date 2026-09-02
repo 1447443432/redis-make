@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       redis_version:
-        description: "Redis version; empty uses config/redis-version.conf"
+        description: "Redis version, e.g. 8.8.2; blank uses config/redis-version.conf"
         required: false
         type: string
       build_tls:
-        description: "Build Redis with bundled OpenSSL TLS support (default: false)"
+        description: "Optional TLS support; unchecked is compatible with Redis 8.8.1"
         required: false
         default: false
         type: boolean
