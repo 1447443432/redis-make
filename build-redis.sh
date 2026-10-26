@@ -34,6 +34,10 @@ printf '%s' "${REDIS_VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || {
     echo "[ERROR] invalid Redis version: ${REDIS_VERSION}" >&2
     exit 1
 }
+printf '%s' "${REDIS_VERSION}" | grep -qE '^8\.8\.[0-9]+$' || {
+    echo "[ERROR] master supports Redis 8.8.x only; use the redis-8.10.x branch for Redis 8.10.x" >&2
+    exit 1
+}
 case "${BUILD_TLS}" in true|false) ;; *) echo "[ERROR] BUILD_TLS must be true or false" >&2; exit 1 ;; esac
 case "${MALLOC}" in libc|jemalloc) ;; *) echo "[ERROR] MALLOC must be libc or jemalloc" >&2; exit 1 ;; esac
 
@@ -97,3 +101,4 @@ found=( ${package} )
 [ -f "${found[0]}" ] || { echo '[ERROR] package not found' >&2; exit 1; }
 (cd "${OUTPUT_DIR}" && sha256sum -c "$(basename "${found[0]}.sha256")")
 echo "BUILD SUCCESS: ${found[0]}"
+

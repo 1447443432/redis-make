@@ -44,6 +44,10 @@ run_stage()
 validate()
 {
     printf '%s' "${REDIS_VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'
+    if ! printf '%s' "${REDIS_VERSION}" | grep -qE '^8\.8\.[0-9]+$'; then
+        echo "master supports Redis 8.8.x only; use the redis-8.10.x branch for Redis 8.10.x" >&2
+        return 1
+    fi
     test -s "${REDIS_TAR}"
     tar tzf "${REDIS_TAR}" >/dev/null
     case "${MALLOC}" in libc|jemalloc) ;; *) return 1 ;; esac
@@ -201,3 +205,4 @@ main()
 }
 
 main "$@"
+

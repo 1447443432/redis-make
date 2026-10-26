@@ -2,7 +2,7 @@
 
 通过 Docker 和 GitHub Actions 构建 Redis 可移植安装包，支持 amd64、arm64，使用 CentOS 7 Builder 生成 glibc 2.17 基线包。
 
-默认版本为 Redis 8.8.2，后续构建其他三段式版本时不需要修改构建逻辑。默认关闭 TLS，并使用 `MALLOC=libc`，兼容 Linux 4K 和 64K 内存页环境。
+默认版本为 Redis 8.8.2。`master` 分支只接受 Redis 8.8.x，Redis 8.10.x 使用独立分支和新版 Builder。默认关闭 TLS，并使用 `MALLOC=libc`，兼容 Linux 4K 和 64K 内存页环境。
 
 ## 项目结构
 
@@ -45,13 +45,13 @@ DOCKER_NO_CACHE=true ./build-redis.sh amd64
 
 `DOCKER_NO_CACHE=true` 会禁用 Docker 构建层缓存，适合排查缓存污染或强制干净重建；普通构建无需勾选或设置它。
 
-新版本只需传入版本号，例如：
+`master` 分支只接受 8.8.x，例如：
 
 ```bash
-./build-redis.sh amd64 9.0.0
+./build-redis.sh amd64 8.8.3
 ```
 
-如果希望长期内置该版本，可以将对应的 `redis-版本.tar.gz` 放入 `sources/`。否则脚本会从 Redis 官方 releases 地址下载。
+输入 8.10.x 或其他版本会在解析阶段直接失败，不会下载、编译或打包。高版本请切换到对应的版本分支；如果希望长期内置 8.8.x 版本，可以将对应的 `redis-版本.tar.gz` 放入 `sources/`，否则脚本会从 Redis 官方 releases 地址下载。
 
 输出示例：
 
@@ -105,7 +105,7 @@ README 等文档变更不会触发 workflow。
 
 在 Actions → Build Redis → Run workflow 页面填写：
 
-- `redis_version`：Redis 三段式版本号，例如 `8.8.2`。留空使用 `config/redis-version.conf` 中的默认版本；填写新版本时无需修改脚本。
+- `redis_version`：Redis 8.8.x 三段式版本号，例如 `8.8.2`。留空使用 `config/redis-version.conf` 中的默认版本；填写 8.10.x 等高版本会直接失败。
 - `build_tls`：默认 `false`。不勾选时生成不依赖 OpenSSL 的兼容包；只有需要 Redis TLS 功能时才勾选。
 - `malloc`：默认 `libc`。推荐保持默认，可兼容 4K/64K 内存页；只有确认目标环境支持时才选择 `jemalloc`。
 
@@ -129,3 +129,4 @@ registry.cn-shanghai.aliyuncs.com/jing-images/linux_arm64_centos_builder:7.9.200
 ```
 
 镜像至少需要 gcc、g++、make、perl、tar、curl、sha256sum、readelf，以及 Redis 编译所需的基础开发工具。启用 TLS 时还需要 OpenSSL 编译工具链。
+
