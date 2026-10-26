@@ -101,4 +101,3 @@ found=( ${package} )
 [ -f "${found[0]}" ] || { echo '[ERROR] package not found' >&2; exit 1; }
 (cd "${OUTPUT_DIR}" && sha256sum -c "$(basename "${found[0]}.sha256")")
 echo "BUILD SUCCESS: ${found[0]}"
-
