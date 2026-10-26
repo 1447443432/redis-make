@@ -2,7 +2,7 @@
 
 通过 Docker 和 GitHub Actions 构建 Redis 可移植安装包，支持 amd64、arm64，使用 CentOS 7 Builder 生成 glibc 2.17 基线包。
 
-默认版本为 Redis 8.8.2。`master` 分支只接受 Redis 8.8.x，Redis 8.10.x 使用独立分支和新版 Builder。默认关闭 TLS，并使用 `MALLOC=libc`，兼容 Linux 4K 和 64K 内存页环境。
+默认版本为 Redis 8.8.3。`master` 分支只接受 Redis 8.8.x，Redis 8.10.x 使用独立分支和新版 Builder。默认关闭 TLS，并使用 `MALLOC=libc`，兼容 Linux 4K 和 64K 内存页环境。
 
 ## 项目结构
 
@@ -20,18 +20,18 @@ redis-make/
 
 ## 本地构建
 
-仓库内置 Redis 8.8.2 源码包；启用 TLS 时还会复用仓库内的 OpenSSL 3.5.6 源码包。构建脚本会优先使用 `sources/` 中匹配版本的源码，不存在时才下载。
+仓库当前保留 Redis 8.8.2 源码包；默认构建 Redis 8.8.3。启用 TLS 时还会复用仓库内的 OpenSSL 3.5.6 源码包。构建脚本会优先使用 `sources/` 中匹配版本的源码，不存在时才下载。
 
 ```bash
 chmod +x build-redis.sh
 ./build-redis.sh amd64
-./build-redis.sh arm64 8.8.2
+./build-redis.sh arm64 8.8.3
 ```
 
 可通过参数或环境变量覆盖默认配置：
 
 ```bash
-REDIS_VERSION=8.8.2 ./build-redis.sh amd64
+REDIS_VERSION=8.8.3 ./build-redis.sh amd64
 MALLOC=libc ./build-redis.sh arm64
 BUILD_TLS=true ./build-redis.sh amd64
 BUILDER_IMAGE=my-builder:latest ./build-redis.sh amd64
@@ -57,8 +57,8 @@ DOCKER_NO_CACHE=true ./build-redis.sh amd64
 
 ```text
 output/
-├── redis-8.8.2-glibc2.17-amd64.tar.gz
-├── redis-8.8.2-glibc2.17-amd64.tar.gz.sha256
+├── redis-8.8.3-glibc2.17-amd64.tar.gz
+├── redis-8.8.3-glibc2.17-amd64.tar.gz.sha256
 ├── build-info.txt
 └── docker-amd64.log
 ```
@@ -66,15 +66,15 @@ output/
 安装与校验：
 
 ```bash
-sha256sum -c redis-8.8.2-glibc2.17-amd64.tar.gz.sha256
-tar zxf redis-8.8.2-glibc2.17-amd64.tar.gz -C /usr/local
-/usr/local/redis-8.8.2-glibc2.17-amd64/bin/redis-server --version
-/usr/local/redis-8.8.2-glibc2.17-amd64/bin/redis-cli --version
+sha256sum -c redis-8.8.3-glibc2.17-amd64.tar.gz.sha256
+tar zxf redis-8.8.3-glibc2.17-amd64.tar.gz -C /usr/local
+/usr/local/redis-8.8.3-glibc2.17-amd64/bin/redis-server --version
+/usr/local/redis-8.8.3-glibc2.17-amd64/bin/redis-cli --version
 ```
 
 默认产物不依赖 OpenSSL，和 Redis 8.8.1 的非 TLS 包保持兼容。设置 `BUILD_TLS=true` 后，产物会携带 OpenSSL 3.5.6 运行库并写入相对 RPATH；目标主机不需要预装 `libssl.so.10` 或 `libcrypto.so.10`。
 
-默认 `MALLOC=libc` 是兼容 64K 页系统的关键。Redis 8.8.2 如果使用 jemalloc，在 UOS 等 64K 页 ARM64 系统上可能启动时报：
+默认 `MALLOC=libc` 是兼容 64K 页系统的关键。Redis 8.8.x 如果使用 jemalloc，在 UOS 等 64K 页 ARM64 系统上可能启动时报：
 
 ```text
 <jemalloc>: Unsupported system page size
@@ -85,7 +85,7 @@ tar zxf redis-8.8.2-glibc2.17-amd64.tar.gz -C /usr/local
 向 `master` 推送构建相关文件，或在 Actions → Build Redis → Run workflow 手动执行时，会分别构建 amd64 和 arm64，并创建或覆盖对应 Release：
 
 ```text
-redis-8.8.2
+redis-8.8.3
 ```
 
 Release 包含两个架构的安装包、SHA256 文件、构建信息和 Docker 日志。配置仓库 Secret `HAP_WEBHOOK_URL` 后，Release 创建成功会自动向 HAP Webhook 推送版本、下载地址和 SHA256；未配置时会跳过同步，不影响构建。
@@ -107,14 +107,14 @@ README 等文档变更不会触发 workflow。
 
 在 Actions → Build Redis → Run workflow 页面填写：
 
-- `redis_version`：Redis 8.8.x 三段式版本号，例如 `8.8.2`。留空使用 `config/redis-version.conf` 中的默认版本；填写 8.10.x 等高版本会直接失败。
+- `redis_version`：Redis 8.8.x 三段式版本号，例如 `8.8.3`。留空使用 `config/redis-version.conf` 中的默认版本；填写 8.10.x 等高版本会直接失败。
 - `build_tls`：默认 `false`。不勾选时生成不依赖 OpenSSL 的兼容包；只有需要 Redis TLS 功能时才勾选。
 - `malloc`：默认 `libc`。推荐保持默认，可兼容 4K/64K 内存页；只有确认目标环境支持时才选择 `jemalloc`。
 
-推荐构建 Redis 8.8.2：
+推荐构建 Redis 8.8.3：
 
 ```text
-redis_version: 8.8.2
+redis_version: 8.8.3
 build_tls:     unchecked
 malloc:        libc
 ```

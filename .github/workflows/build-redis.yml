@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       redis_version:
-        description: "Redis 8.8.x version, e.g. 8.8.2; blank uses config/redis-version.conf"
+        description: "Redis 8.8.x version, e.g. 8.8.3; blank uses config/redis-version.conf"
         required: false
         type: string
       build_tls:
