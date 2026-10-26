@@ -27,13 +27,13 @@ jobs:
           set -euo pipefail
 
           REPOSITORY="${GITHUB_REPOSITORY}"
-          WORKFLOW_ID="$(gh api "repos/${REPOSITORY}/actions/workflows" --paginate --jq '.workflows[] | select(.name == "Build Redis") | .id' | head -n 1)"
+          WORKFLOW_ID="$(gh api "repos/${REPOSITORY}/actions/workflows" --paginate --jq '.workflows[] | select(.name == "Build Redis") | .id' | sed -n '1p')"
           test -n "${WORKFLOW_ID}"
 
           LATEST_SUCCESS="$(gh api --paginate \
-            "repos/${REPOSITORY}/actions/workflows/${WORKFLOW_ID}/runs?status=success&per_page=100" \
-            --jq '.workflow_runs[] | select(.conclusion == "success") | [.id, .created_at] | @tsv' \
-            | sort -k2,2r | head -n 1 | cut -f1)"
+            "repos/${REPOSITORY}/actions/workflows/${WORKFLOW_ID}/runs?per_page=100" \
+            --jq '.workflow_runs[] | select(.status == "completed" and .conclusion == "success") | [.id, .created_at] | @tsv' \
+            | sort -k2,2r | sed -n '1p' | cut -f1)"
           test -n "${LATEST_SUCCESS}"
 
           echo "Keeping latest successful Build Redis run: ${LATEST_SUCCESS}"
@@ -53,9 +53,9 @@ jobs:
           {
             echo "## Actions cleanup"
             echo
-            echo "- Workflow: `Build Redis`"
-            echo "- Kept latest successful run: `${LATEST_SUCCESS}`"
-            echo "- Deleted older completed runs: `${DELETED}`"
+            echo "- Workflow: \`Build Redis\`"
+            echo "- Kept latest successful run: \`${LATEST_SUCCESS}\`"
+            echo "- Deleted older completed runs: \`${DELETED}\`"
             echo "- Release assets were not modified."
           } >>"${GITHUB_STEP_SUMMARY}"
 
