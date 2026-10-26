@@ -101,6 +101,8 @@ Release 包含两个架构的安装包、SHA256 文件、构建信息和 Docker 
 
 README 等文档变更不会触发 workflow。
 
+运行记录清理与构建使用同一个 `build-redis.yml`：构建和 Release 成功后会删除更早的已完成 Build Redis 运行记录及其日志、Artifacts，只保留当前成功运行；Release 及 Release 附件不会删除。清理 Job 失败不会影响已经完成的构建和 Release。
+
 ### 手动执行参数
 
 在 Actions → Build Redis → Run workflow 页面填写：
@@ -129,4 +131,3 @@ registry.cn-shanghai.aliyuncs.com/jing-images/linux_arm64_centos_builder:7.9.200
 ```
 
 镜像至少需要 gcc、g++、make、perl、tar、curl、sha256sum、readelf，以及 Redis 编译所需的基础开发工具。启用 TLS 时还需要 OpenSSL 编译工具链。
-

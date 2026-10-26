@@ -327,3 +327,52 @@ jobs:
             --data-binary @hap-payload.json \
             "${HAP_WEBHOOK_URL}"
 
+  cleanup-runs:
+    name: Keep latest successful run
+    needs:
+      - resolve
+      - build-amd64
+      - build-arm64
+      - release
+      - sync-hap
+    if: ${{ always() && needs.resolve.result == 'success' && needs.build-amd64.result == 'success' && needs.build-arm64.result == 'success' && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Delete older completed runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! runs_json="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/workflows/build-redis.yml/runs?per_page=100&status=completed")"; then
+            echo "::warning::Could not list workflow runs"
+            exit 0
+          fi
+          if ! run_ids="$(jq -r --argjson current "${GITHUB_RUN_ID}" '.workflow_runs[] | select(.id < $current) | .id' <<<"${runs_json}")"; then
+            echo "::warning::Could not parse workflow runs"
+            exit 0
+          fi
+          deleted=0
+          failed=0
+          while IFS= read -r run_id; do
+            [ -n "${run_id}" ] || continue
+            if gh api --silent --method DELETE "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}"; then
+              echo "Deleted old run ${run_id}"
+              deleted=$((deleted + 1))
+            else
+              echo "::warning::Could not delete run ${run_id}"
+              failed=$((failed + 1))
+            fi
+          done <<<"${run_ids}"
+          echo "Deleted ${deleted} older runs; failed ${failed}; kept current run ${GITHUB_RUN_ID}"
+          {
+            echo "## Actions cleanup"
+            echo
+            echo "- Deleted older completed Build Redis runs: \`${deleted}\`"
+            echo "- Delete failures: \`${failed}\`"
+            echo "- Kept current successful run: \`${GITHUB_RUN_ID}\`"
+            echo "- Release assets were not modified."
+          } >>"${GITHUB_STEP_SUMMARY}"
